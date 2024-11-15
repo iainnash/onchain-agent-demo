@@ -20,9 +20,9 @@ bot.on("text", async (ctx) => {
   const userMessage = ctx.message.text;
 
   // Check if the message starts with "!"
-  if (!userMessage.startsWith("!")) {
-    return;
-  }
+  // if (!userMessage.startsWith("!")) {
+  //   return;
+  // }
 
   // Extract the message text after "!"
   const cleanMessage = userMessage.slice(1).trim();
