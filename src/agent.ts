@@ -49,41 +49,42 @@ export const createChatbot = () => {
     openAIApiKey: process.env.OPENAI_API_KEY!,
   });
 
-  const boundModel = model.bindTools(tools);
+  const boundModel = model.bind({promptIndex: 0, tools: tools});
 
   const messageHistory = new InMemoryChatMessageHistory();
 
-  return {
-    call: async (text: string) => {
-      messageHistory.addMessage(new HumanMessage(text));
+  async function getMessagesAndPrompt() {
       const incomingMessages = [
         new SystemMessage(PROMPT_MESSAGE.toString("utf-8")),
         ...(await messageHistory.getMessages()),
       ];
-      console.log({ incomingMessages });
-      let response = await boundModel.invoke(incomingMessages);
+      console.log({incomingMessages});
+      return incomingMessages;
+  }
 
-      await messageHistory.addMessage(response);
+  return {
+    call: async (text: string) => {
+      messageHistory.addMessage(new HumanMessage(text));
+      let response = await boundModel.invoke(await getMessagesAndPrompt());
 
-      if (response.tool_calls) {
+
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        await messageHistory.addMessage(response);
         for (const toolCall of response.tool_calls!) {
           const selectedTool = tools.find(
             (tool) => tool.name === toolCall.name
           )!;
-          // Clear messages
+
+          // reset clear messages
           if (selectedTool.name === "reset") {
             await messageHistory.clear();
           }
 
-          // Call function for tool
           const toolMessage = await selectedTool.invoke(toolCall);
-          // Add message in the tool history for ai response
           messageHistory.addMessage(toolMessage);
         }
 
-        const lastMessages = await messageHistory.getMessages();
-        console.log(lastMessages);
-        const toolResponse = await model.invoke(lastMessages);
+        const toolResponse = await model.invoke(await getMessagesAndPrompt());
         messageHistory.addMessage(
           new AIMessage(toolResponse.content.toString())
         );
@@ -92,6 +93,7 @@ export const createChatbot = () => {
         messageHistory.addMessage(new AIMessage(response.content.toString()));
       }
 
+      console.log('response: ', response.content)
       return response.content.toString();
     },
   };
