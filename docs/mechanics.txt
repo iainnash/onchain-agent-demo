@@ -1,0 +1,68 @@
+Wow Mechanics
+
+Last updated October 31, 2024
+
+Wow is a protocol that allows users to create and interact with meme tokens. To understand how it works, let’s explore the technical components and processes involved.
+Architecture and Smart Contracts
+
+Wow is built on Base, an Ethereum Layer 2 chain. EVM-compatible smart contracts serve as the backbone of all Wow pools. All pools on Wow are user-generated, and the tokens in Wow pools are not subject to any presale or team allocation. There are three types of smart contracts on Wow:
+
+    Wow Pool Contracts
+        Each Wow pool is governed by a smart contract, which handles the supply and purchases of ERC-20z tokens within the pool, user entry, and price calculation. A Wow pool contract is automatically deployed when a user creates a meme on Wow.
+    Tokenomics Contract
+        The rules around token minting and burning are defined on the platform level, and are applicable to all tokens created on Wow. These rules directly govern the supply and demand mechanics of tokens launched on Wow.
+    Rewards Contract
+        A rewards contract manages the distribution of Protocol Rewards across Wow.
+
+Token Life Cycle and Wow Pool Mechanics
+
+At the heart of Wow’s mechanics are the tokens created for each Wow pool. These tokens are subject to a programmatic and controlled price inflation, designed to increase in value as demand grows within the pool. On Wow, there are four stages in any given token’s life cycle:
+Stage 1 	Pool Creation 	
+
+When a user creates a meme, under the hood the user is actually deploying a pool through a Pool Contract. At the time of pool creation, no tokens exist yet, but the pool is now eligible for Wow’s bonding curve mechanics.
+Stage 2 	Bonding Curve 	
+
+When a user contributes funds to a pool, the Pool Contract mints new tokens into existence and sends them to the user, thus expanding the token’s existing supply by the same amount. These steps together constitute a token purchase.
+
+When a user sells tokens back to the pool, the Pool contract burns the returned tokens, thus reducing the token’s existing supply by the same amount. These steps together constitute a token sale.
+
+During this stage, the maximum supply of any given token is 800,000,000 units.
+Stage 3 	Graduation 	
+
+When a buy order increases the total supply to 800,000,000 units, the Wow pool transitions to a Uniswap v3 pool.
+
+At this time, 200,000,000 additional tokens are minted—making the total supply 1,000,000,000 – and are added to the Uniswap v3 pool as liquidity. Simultaneously, the ETH in the token’s Wow contract (i.e., the proceeds in ETH from the sale of the first 800,000,000 tokens, less protocol fees*) is also transferred to the Uniswap v3 pool.
+
+Note that the ETH in a Wow pool cannot exceed the maximum worth of 800,000,000 units of a token at any given time, as priced by the bonding curve. In the event a purchase transaction would cause the Wow pool to exceed this maximum worth, the excess portion of ETH in this transaction would be automatically refunded to the sender wallet.
+Stage 4 	Off-Platform Trading 	
+
+All trading of the graduated token now occurs directly through Uniswap. The token is no longer supported on Wow.
+*See “Fee Structure” below
+Pricing and Bonding Curve Dynamics
+
+The bonding curve model determines a token’s price at any given time, creating an economy in each Wow pool. The model involves the following features:
+
+    Curve Design
+        The bonding curve algorithm follows a step-function design, under which a token’s price starts low when the token’s demand is low, and increases incrementally as more tokens are minted (i.e. purchased).
+        The curve design stabilizes initial volatility and leaves room for rapid price growth with demand surges.
+    Programmatic Price Adjustments
+        The Wow pool contract automatically adjusts prices based on the bonding curve, so the listed token prices are responsive to real-time changes in supply and demand within the pool.
+    Sell Pressure Balancing
+        When a sell transaction is executed, the bonding curve dynamically readjusts the price based on the reduced token supply. This mechanism incidentally creates an economic incentive to time exits strategically.
+
+Fee Structure
+
+Each buying or selling transaction in connection with any token deployed on Wow is subject to a 1% protocol fee. This fee is programmatically collected out of the ETH involved in the transaction, and sent to Wow’s rewards contract. The rewards contract subsequently distributes the collected fees to various parties. The rewards distribution structure is subject to change by Wow at any time and for any reason. Currently, it is as follows:
+
+    50% to the token creator
+    20% to the protocol
+    15% to the platform referrer
+    15% to the order referrer
+
+For purposes of the rewards distribution, please note the following:
+
+    The platform referrer is the platform through which the token is created using the Wow Protocol.
+    The order referrer is the platform that is used to execute a buy or sell order on the Wow Protocol.
+    In the event a transaction is not attributable to a platform referrer or an order referrer, the relevant protocol reward will be distributed to the protocol by default.
+
+The remaining 99% of the transaction is deposited into either (i) the bonding curve (if the token is still managed by a bonding curve on Wow), or (ii) the Uniswap liquidity reserve (if the token has graduated from Wow and is managed by a Uniswap v3 pool).

@@ -1,100 +1,70 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { Annotation, END } from "@langchain/langgraph";
+import type { ChatPromptTemplate } from "@langchain/core/prompts";
+import { RunnableWithMessageHistory } from "@langchain/core/runnables";
+import { RedisChatMessageHistory } from "@langchain/redis";
+import { pull } from "langchain/hub";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import {
-  AIMessage,
-  BaseMessage,
-  HumanMessage,
-  SystemMessage,
-} from "@langchain/core/messages";
-import { mintTool } from "./tools/mint";
-import { resetTool } from "./tools/reset";
-import { InMemoryChatMessageHistory } from "@langchain/core/chat_history";
-import { readFileSync } from "fs";
+import { createWowToken } from "./tools/createWowToken";
+import { createWowTokenImagine } from "./tools/createWowTokenImagine";
+import { createRetriever } from "./tools/retriever";
 
-export interface ConversationState {
-  history: BaseMessage[];
-  current_message: string;
-  tool_result?: string;
-  conversation_id: string;
-}
+export const createChatbot = async () => {
+  const tools = [
+    await createRetriever(),
+    createWowToken,
+    createWowTokenImagine,
+  ];
 
-const PROMPT_MESSAGE = readFileSync("./prompt.txt");
-
-const AgentState = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
-});
-
-const shouldContinue = (state: typeof AgentState.State) => {
-  const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
-  // If there is no function call, then we finish
-  if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
-    return END;
-  }
-  // Otherwise if there is, we continue
-  return "tools";
-};
-
-export const createChatbot = () => {
-  const tools = [mintTool, resetTool];
-  const toolNode = new ToolNode<typeof AgentState.State>(tools);
-
-  // Initialize OpenAI LLM configuration
-  const model = new ChatOpenAI({
-    temperature: 0.7,
-    openAIApiKey: process.env.OPENAI_API_KEY!,
+  const llm = new ChatAnthropic({
+    modelName: "claude-3-opus-20240229",
+    temperature: 0.5,
   });
 
-  const boundModel = model.bind({promptIndex: 0, tools: tools});
+  const prompt = await pull<ChatPromptTemplate>("wow-prompt-prototype");
 
-  const messageHistory = new InMemoryChatMessageHistory();
+  const agent = await createToolCallingAgent({
+    llm,
+    tools,
+    prompt,
+  });
 
-  async function getMessagesAndPrompt() {
-      const incomingMessages = [
-        new SystemMessage(PROMPT_MESSAGE.toString("utf-8")),
-        ...(await messageHistory.getMessages()),
-      ];
-      console.log({incomingMessages});
-      return incomingMessages;
-  }
+  const agentExecutor = new AgentExecutor({
+    agent,
+    tools,
+  });
+
+  const messageHistory = new RedisChatMessageHistory({
+    sessionId: new Date().toISOString(),
+    sessionTTL: 300,
+
+    config: { url: "redis://localhost:6379/" },
+  });
+
+  await messageHistory.ensureReadiness();
+
+  const agentWithChatHistory = new RunnableWithMessageHistory({
+    runnable: agentExecutor,
+    // This is needed because in most real world scenarios, a session id is needed per user.
+    // It isn't really used here because we are using a simple in memory ChatMessageHistory.
+    getMessageHistory: (_sessionId) => messageHistory,
+    inputMessagesKey: "input",
+    historyMessagesKey: "chat_history",
+  });
 
   return {
-    call: async (text: string) => {
-      messageHistory.addMessage(new HumanMessage(text));
-      let response = await boundModel.invoke(await getMessagesAndPrompt());
-
-
-      if (response.tool_calls && response.tool_calls.length > 0) {
-        await messageHistory.addMessage(response);
-        for (const toolCall of response.tool_calls!) {
-          const selectedTool = tools.find(
-            (tool) => tool.name === toolCall.name
-          )!;
-
-          // reset clear messages
-          if (selectedTool.name === "reset") {
-            await messageHistory.clear();
-          }
-
-          const toolMessage = await selectedTool.invoke(toolCall);
-          messageHistory.addMessage(toolMessage);
+    call: async (input: string, sessionId: string) => {
+      let response = await agentWithChatHistory.invoke(
+        {
+          input,
+        },
+        {
+          configurable: {
+            sessionId: sessionId,
+          },
         }
-
-        const toolResponse = await model.invoke(await getMessagesAndPrompt());
-        messageHistory.addMessage(
-          new AIMessage(toolResponse.content.toString())
-        );
-        response = toolResponse;
-      } else {
-        messageHistory.addMessage(new AIMessage(response.content.toString()));
-      }
-
-      console.log('response: ', response.content)
-      return response.content.toString();
+      );
+      return response.output;
     },
   };
 };
